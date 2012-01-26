@@ -1,0 +1,194 @@
+<?php
+
+function wisski_navigator_menu() {
+
+  $items = array();
+  
+  //  The settings for the wisski module in the admin page - might be useful later
+  $items['navigate'] = array(
+    'title' => 'Browse content',
+    'description' => 'This is the WissKI-Template Navigator.',
+    'page callback' => 'wisski_navigator_overview',
+    'access arguments' => array('wisski access templateView'),
+    'type' => MENU_NORMAL_ITEM, 
+  );
+  
+  $items['navigate/%wisski_navigator_group_id'] = array(
+    'title' => '',
+    'title callback' => 'wisski_navigator_group_title',
+    'title arguments' => array(1),
+    'description' => 'This is the WissKI-Template Navigator.',
+    'page callback' => 'wisski_navigator_overview_group',
+    'page arguments' => array( 1),
+    'access arguments' => array('wisski access templateView'),
+    'type' => MENU_NORMAL_ITEM, 
+  );
+
+  $items['goto_navigate'] = array(
+    'title' => 'Navigate',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('navigate'),
+    'access callback' => 'user_access',
+    'menu_name' => 'secondary-links',
+    'weight' => -49,
+  );  
+  
+  
+  return $items;
+  
+}
+
+function wisski_navigator_group_title($groupid) {
+  return t(wisski_pathbuilder_getName($groupid));
+}
+
+function wisski_navigator_overview_group($groupdata) {
+
+  global $pager_page_array, $pager_total, $pager_total_items;
+  
+  $page = isset($_GET['page']) ? $_GET['page'] : 0;
+  
+  $pager_page_array = explode(',', $page);
+  
+  $element = 0;
+  $limit = variable_get("wisski_navigator_limit", 25);  
+  
+  $samepart = _wisski_pathbuilder_calculate_group_samepart($groupdata['id']);
+
+  global $user;
+  $vars = variable_get("wisski_pathbuilder_templateids", array());
+
+  if(!isset($vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]]) ||
+    $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] != $groupdata['id']) {
+    $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] = $groupdata['id'];
+    variable_set("wisski_pathbuilder_templateids", $vars);
+  }
+
+  $sparql = ("SELECT COUNT(?x) AS ?z WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
+
+  $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+  
+  $pager_total_items[$element] = $out['result']['rows'][0]['z'];
+
+  $pager_total[$element] = ceil($pager_total_items[$element] / $limit);
+  $pager_page_array[$element] = max(0, min((int)
+  $pager_page_array[$element], ((int) $pager_total[$element]) - 1));
+
+  preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
+
+  // any shot names?
+  if($matches[0]) {
+    foreach($matches[0] as $match) {
+      $sparqlparts = wisski_pathbuilder_get_sparql(substr($match, 1), $sparqlcondition, TRUE);        
+    }
+
+    $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " ?out WHERE { ");
+  
+    foreach($sparqlparts["triples"] as $triple) {
+      $sparql .= $triple . " . ";
+    }
+
+    $sparql .= $sparqlparts["end"];
+
+    $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));  
+
+    $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+
+  } else {
+    $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");
+    $sparql .= (" ORDER BY ?x" . (floor(count($samepart)/2)) . " LIMIT " . $limit . " OFFSET " . ($page * $limit));
+
+    $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+
+  }
+  $results = $out['result']['rows'];
+
+  $list = array();
+  
+  foreach($results as $result) {
+    $list[] = l(wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($result["x". (floor(count($samepart)/2))]), $groupdata['id'], $groupdata), $result["x". (floor(count($samepart)/2))]); 
+  }
+  
+  return (theme('item_list', $list) . theme('pager', NULL, 10, 0));
+}
+
+function wisski_navigator_overview($form_state = NULL) {
+  $list = wisski_navigator_add_groups();
+
+  $form['description'] = array(
+    '#type' => 'markup',
+    '#prefix' => '<p>',
+    '#suffix' => '</p>',
+     '#value' => t('Navigate the content'),
+       '#weight' => 0,
+  );
+              
+  return drupal_render($form) . theme('item_list', $list);
+}
+
+function wisski_navigator_group_id_load($groupid) {
+  include_once(drupal_get_path('module', 'wisski_pathbuilder') . '/wisski_pathbuilder.inc');
+  $groups = wisski_pathbuilder_getGroups();
+  
+  if(in_array($groupid, $groups)) {
+    $data = wisski_pathbuilder_getPathData($groupid);
+    if($data['enabled'])
+      return $data;
+  }
+  return FALSE;
+}
+
+function wisski_navigator_enable() {
+  wisski_navigator_add_groups();
+}
+
+function wisski_navigator_add_groups() {
+  include_once(drupal_get_path('module', 'wisski_pathbuilder') . '/wisski_pathbuilder.inc');
+  $myIDs = variable_get('wisski_navigator_menus', array());
+
+  $groups = wisski_pathbuilder_getGroups();
+
+  $saveIDs = array();
+  
+  foreach($myIDs as $id => $itemid) {
+    $oldlinks[$itemid] = menu_link_load($id);
+    if(!in_array($itemid, $groups))
+      menu_link_delete($id);
+  }
+  
+  $ret = array();
+  
+  foreach($groups as $group) {
+    $data = wisski_pathbuilder_getPathData($group);
+    if(!($data['enabled']))
+      continue;
+    $item = array();
+    $item['link_path'] = ("navigate/" . $group);
+    $item['link_title'] = $data['name'];
+    $item['menu_name'] = isset($oldlinks[$group]['menu_name']) ? $oldlinks[$group]['menu_name']: "navigation";
+    $item['weight'] = isset($oldlinks[$group]['weight']) ? $oldlinks[$group]['weight'] : 0;
+    $item['expanded'] = isset($oldlinks[$group]['expanded']) ? $oldlinks[$group]['expanded'] : 0;
+    $item['options'] = array();
+    $item['mlid'] = isset($oldlinks[$group]['mlid']) ? $oldlinks[$group]['mlid'] : NULL;
+    $item['hidden'] = isset($oldlinks[$group]['hidden']) ? $oldlinks[$group]['hidden'] : 0;
+    $item['plid'] = isset($oldlinks[$group]['plid']) ? $oldlinks[$group]['plid'] : NULL;
+      
+    $id = menu_link_save(&$item);
+    $saveIDs[$id] = $group;
+    if($item['hidden'] == 0) { 
+      if(module_exists("menu_per_role")) {
+      	if(is_null(_menu_per_role_access($id))) 
+          $ret[] = l($data['name'], ("navigate/" . $group));
+      }
+      else
+        $ret[] = l($data['name'], ("navigate/" . $group));
+    }
+  }
+
+
+  variable_set('wisski_navigator_menus', $saveIDs);
+
+  return $ret;
+  
+
+}

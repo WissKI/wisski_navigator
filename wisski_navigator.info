@@ -1,0 +1,7 @@
+; $Id$
+name = WissKI Navigator Module
+description = An addon for the WissKI Pathbuilder-Module that enables browsing of templated content
+version = 1.0
+core = 6.x
+dependencies[] = wisski_pathbuilder
+package = "WissKI"
