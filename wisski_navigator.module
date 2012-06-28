@@ -28,7 +28,7 @@ function wisski_navigator_menu() {
     'title' => 'Navigate',
     'page callback' => 'drupal_goto',
     'page arguments' => array('navigate'),
-    'access callback' => 'user_access',
+    'access arguments' => array('wisski access templateView'),
     'menu_name' => 'secondary-links',
     'weight' => -49,
   );  
