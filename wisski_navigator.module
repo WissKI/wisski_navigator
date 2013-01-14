@@ -43,7 +43,7 @@ function wisski_navigator_group_title($groupid) {
 }
 
 function wisski_navigator_overview_group($groupdata) {
-
+//  drupal_set_message(serialize($groupdata));
   global $pager_page_array, $pager_total, $pager_total_items;
   
   $page = isset($_GET['page']) ? $_GET['page'] : 0;
@@ -64,7 +64,9 @@ function wisski_navigator_overview_group($groupdata) {
     variable_set("wisski_pathbuilder_templateids", $vars);
   }
 
+/*
   $sparql = ("SELECT COUNT(?x) AS ?z WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
+
 
   $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
   
@@ -73,28 +75,47 @@ function wisski_navigator_overview_group($groupdata) {
   $pager_total[$element] = ceil($pager_total_items[$element] / $limit);
   $pager_page_array[$element] = max(0, min((int)
   $pager_page_array[$element], ((int) $pager_total[$element]) - 1));
-
+*/
   preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
+
+  $sum = 0;
 
   // any shot names?
   if($matches[0]) {
+//    drupal_set_message(serialize($matches[0]));
     foreach($matches[0] as $match) {
       $sparqlparts = wisski_pathbuilder_get_sparql(substr($match, 1), $sparqlcondition, TRUE);        
+      break;
     }
+    
+    $countsq = ("SELECT count(?out) as ?num WHERE { ");
 
     $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " ?out WHERE { ");
   
     foreach($sparqlparts["triples"] as $triple) {
       $sparql .= $triple . " . ";
+      $countsq .= $triple . " . ";
     }
 
+    $countsq .= $sparqlparts["end"];
     $sparql .= $sparqlparts["end"];
 
     $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));  
 
+//    drupal_set_message(htmlentities($sparql));
+
+    $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
+    $sum = $sum['result']['rows'][0]['num'];
     $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
 
+
   } else {
+    $sparql = ("SELECT COUNT(?x) AS ?z WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
+
+    $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+
+    $sum = $out['result']['rows'][0]['z'];
+
     $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");
     $sparql .= (" ORDER BY ?x" . (floor(count($samepart)/2)) . " LIMIT " . $limit . " OFFSET " . ($page * $limit));
 
@@ -102,6 +123,12 @@ function wisski_navigator_overview_group($groupdata) {
 
   }
   $results = $out['result']['rows'];
+
+  $pager_total_items[$element] = $sum;
+
+  $pager_total[$element] = ceil($pager_total_items[$element] / $limit);
+  $pager_page_array[$element] = max(0, min((int)
+  $pager_page_array[$element], ((int) $pager_total[$element]) - 1));
 
   $list = array();
   
