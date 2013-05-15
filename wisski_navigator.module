@@ -192,48 +192,33 @@ function wisski_navigator_overview_group($groupdata) {
     '#suffix' => '</label>',
     '#value' => t("Hits") . " " . $begin . " - " . min($end,$sum) . " " . t("of") . " " . $sum . ":",
   );
-                  
 
-  $list = array();
-
-  foreach($results as $result) {
-    $uri = $result["x". (floor(count($samepart)/2))];
-    $name = wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), $groupdata['id'], $groupdata);
-
-    if($image_support == "yes") {
-      $imgs = wisski_pathbuilder_getImages(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), 1);
-
-      preg_match('/<img src="(.*?)"/', $imgs, $matches);
+    $list = array();
+    foreach($results as $result) {
+        $uri = $result["x". (floor(count($samepart)/2))];
+        $name = wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), $groupdata['id'], $groupdata);
+        if($image_support == "yes") {
+            $imgs = wisski_pathbuilder_getImages(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), 1);
+            preg_match('/<img src="(.*?)"/', $imgs, $matches);
+            if(!empty($matches[1])) {
+                $value = "<div class='wisski_tileimg'><a href='".$uri."'><img src='".$matches[1]."'/></a></div><a href='".$uri."'>".$name."</a>";
+            } else {
+                $nopic = path_to_theme() . '/pics/img_nopic.png';
+                global $base_url;
+                if(is_file($nopic)) {
+                    $value = "<div class='wisski_tileimg'><a href='".$uri."'><img src='".$base_url."/".$nopic."'/></a></div><a href='".$uri."'>".$name."</a>";
+                } else {
+                    $value = "<a href='".$uri."'>".$name."</a>";
+                }    
+            }
+        } else {
+            $value = "<a href='".$uri."'>".$name."</a>";
+        }
+        //$list[] = l($name, $result["x". (floor(count($samepart)/2))], array('html' => 'true'));
+        $list[] = array('data' => $value, 'class'=> 'wisski_resultitem');
     }
 
-    
-    if($image_support) {
-      if(!empty($matches[1])) {
-        $value = "<img src='" . $matches[1]. "'/>\n" .
-                 "<a href='$uri'>" . $name .
-                 '</a>';
-      } else {
-        $nopic = path_to_theme() . '/pics/img_nopic.png';
-        
-        global $base_url;
-        if(is_file($nopic)) {
-          $value = "<img src='" . $base_url . '/' . $nopic. "'/>\n" .
-                   "<a href='$uri'>" . $name .
-                   '</a>';
-        } else
-          $value = "<a href='$uri'>" . $name . '</a>';
-      }
-    } else
-      $value = "<a href='$uri'>" . $name . '</a>';
-
-    //$list[] = l($name, $result["x". (floor(count($samepart)/2))], array('html' => 'true')); 
-
-    $list[] = array('data' => $value, 'class'=> 'wisski_resultitem');
-  }
-  
-  
-
-  return drupal_render($form['heading']) . theme('item_list', $list, NULL, 'ul', array('class' => ($style == 'list' ? "wisski_resultlist" : "wisski_resulttiles"))) . theme('pager', NULL, 10, 0);
+    return drupal_render($form['heading']) . theme('item_list', $list, NULL, 'ul', array('class' => ($style == 'list' ? "wisski_resultlist" : "wisski_resulttiles"))) . theme('pager', NULL, 10, 0);
 }
 
 function wisski_navigator_overview($form_state = NULL) {
