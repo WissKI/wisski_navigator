@@ -197,7 +197,7 @@ function wisski_navigator_overview_group($groupdata) {
     foreach($results as $result) {
         $uri = $result["x". (floor(count($samepart)/2))];
         $name = wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), $groupdata['id'], $groupdata);
-        if($image_support == "yes") {
+        if($image_support && $image_support == "yes") {
             $imgs = wisski_pathbuilder_getImages(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), 1);
             preg_match('/<img src="(.*?)"/', $imgs, $matches);
             if(!empty($matches[1])) {
