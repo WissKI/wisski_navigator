@@ -13,15 +13,12 @@ function wisski_navigator_menu() {
     'type' => MENU_NORMAL_ITEM, 
   );
   
-  $items['navigate/%wisski_navigator_group_id'] = array(
-    'title' => '',
-    'title callback' => 'wisski_navigator_group_title',
-    'title arguments' => array(1),
+  $items['navigate/%'] = array(
     'description' => 'This is the WissKI-Template Navigator.',
     'page callback' => 'wisski_navigator_overview_group',
     'page arguments' => array( 1),
     'access arguments' => array('wisski access templateView'),
-    'type' => MENU_NORMAL_ITEM, 
+    'type' => MENU_NORMAL_ITEM,
   );
 
   $items['goto_navigate'] = array(
@@ -32,14 +29,11 @@ function wisski_navigator_menu() {
     'menu_name' => 'secondary-links',
     'weight' => -49,
   );  
-  
-  
+
+  wisski_navigator_add_groups();
+
   return $items;
   
-}
-
-function wisski_navigator_group_title($groupid) {
-  return t(wisski_pathbuilder_getName($groupid));
 }
 
 function wisski_navigator_form_alter(&$form, &$form_state, $form_id) {
@@ -100,7 +94,7 @@ function wisski_navigator_visualSettings() {
 }
 
 function wisski_navigator_overview_group($groupdata) {
-//  drupal_set_message(serialize($groupdata));
+
   global $pager_page_array, $pager_total, $pager_total_items;
   
   $page = isset($_GET['page']) ? $_GET['page'] : 0;
@@ -144,8 +138,11 @@ function wisski_navigator_overview_group($groupdata) {
 
     $countsq .= $sparqlparts["end"];
     $sparql .= $sparqlparts["end"];
-
-    $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));  
+    
+    if(variable_get("wisski_navigator_alphanumeric_sort", 1))
+      $sparql .= (" ORDER BY xsd:integer(?out) LIMIT " . $limit . " OFFSET " . ($page * $limit));  
+    else
+      $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));
 
     $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
     $sum = $sum['result']['rows'][0]['num'];
@@ -238,13 +235,15 @@ function wisski_navigator_overview($form_state = NULL) {
 function wisski_navigator_group_id_load($groupid) {
   include_once(drupal_get_path('module', 'wisski_pathbuilder') . '/wisski_pathbuilder.inc');
   $groups = wisski_pathbuilder_getGroups();
-  
+  drupal_set_message(serialize(debug_backtrace()));
+
   if(in_array($groupid, $groups)) {
     $data = wisski_pathbuilder_getPathData($groupid);
     if($data['enabled'])
       return $data;
   }
   return FALSE;
+
 }
 
 function wisski_navigator_enable() {
@@ -274,6 +273,7 @@ function wisski_navigator_add_groups() {
     $item = array();
     $item['link_path'] = ("navigate/" . $group);
     $item['link_title'] = $data['name'];
+
     $item['menu_name'] = isset($oldlinks[$group]['menu_name']) ? $oldlinks[$group]['menu_name']: "navigation";
     $item['weight'] = isset($oldlinks[$group]['weight']) ? $oldlinks[$group]['weight'] : 0;
     $item['expanded'] = isset($oldlinks[$group]['expanded']) ? $oldlinks[$group]['expanded'] : 0;
