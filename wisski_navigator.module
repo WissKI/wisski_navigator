@@ -16,7 +16,7 @@ function wisski_navigator_menu() {
   $items['navigate/%'] = array(
     'description' => 'This is the WissKI-Template Navigator.',
     'page callback' => 'wisski_navigator_overview_group',
-    'page arguments' => array( 1),
+    'page arguments' => array(1),
     'access arguments' => array('wisski access templateView'),
     'type' => MENU_NORMAL_ITEM,
   );
@@ -93,9 +93,20 @@ function wisski_navigator_visualSettings() {
 
 }
 
-function wisski_navigator_overview_group($groupdata) {
+function wisski_navigator_overview_group($groupid) {
 
   global $pager_page_array, $pager_total, $pager_total_items;
+  
+  include_once(drupal_get_path('module', 'wisski_pathbuilder') . '/wisski_pathbuilder.inc');
+  $groups = wisski_pathbuilder_getGroups();
+
+  if(in_array($groupid, $groups)) {
+    $data = wisski_pathbuilder_getPathData($groupid);
+    if($data['enabled'])
+      $groupdata = $data;
+  } else {
+    return;
+  }
   
   $page = isset($_GET['page']) ? $_GET['page'] : 0;
   
@@ -232,20 +243,6 @@ function wisski_navigator_overview($form_state = NULL) {
   return drupal_render($form) . theme('item_list', $list);
 }
 
-function wisski_navigator_group_id_load($groupid) {
-  include_once(drupal_get_path('module', 'wisski_pathbuilder') . '/wisski_pathbuilder.inc');
-  $groups = wisski_pathbuilder_getGroups();
-  drupal_set_message(serialize(debug_backtrace()));
-
-  if(in_array($groupid, $groups)) {
-    $data = wisski_pathbuilder_getPathData($groupid);
-    if($data['enabled'])
-      return $data;
-  }
-  return FALSE;
-
-}
-
 function wisski_navigator_enable() {
   wisski_navigator_add_groups();
 }
@@ -271,6 +268,7 @@ function wisski_navigator_add_groups() {
     if(!($data['enabled']))
       continue;
     $item = array();
+
     $item['link_path'] = ("navigate/" . $group);
     $item['link_title'] = $data['name'];
 
@@ -283,6 +281,7 @@ function wisski_navigator_add_groups() {
     $item['plid'] = isset($oldlinks[$group]['plid']) ? $oldlinks[$group]['plid'] : NULL;
       
     $id = menu_link_save(&$item);
+    
     $saveIDs[$id] = $group;
     if($item['hidden'] == 0) { 
       if(module_exists("menu_per_role")) {
