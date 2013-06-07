@@ -127,7 +127,18 @@ function wisski_navigator_overview_group($groupid) {
   }
 
   /* We should not skip this, although the name generation got more intelligent */
+  //preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
+  // Only take names which are not surrounded by brackets - brackets make them optional
   preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
+
+  preg_match_all('/(\{.*?)(![0-9]*)(.*?\})/',$data['short_name'], $optional_matches);
+  
+  // if a match is an optional match, kill it!
+  foreach($matches[0] as $key => $match) {
+    if(in_array($match, $optional_matches[2])) {
+      unset($matches[0][$key]);
+    }    
+  }
 
   $sum = 0;
 
