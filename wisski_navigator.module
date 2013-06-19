@@ -299,18 +299,19 @@ function wisski_navigator_add_groups() {
           $string = '<dt>' . l($data['name'], ("navigate/" . $group)) . '</dt>';
           if(!empty($data['description']))
             $string .= '<dd>' . $data['description'] . '</dd>';
-          $ret[] = $string;
+          $ret[$item['weight']] = $string;
         }
       }
       else {
         $string = '<dt>' . l($data['name'], ("navigate/" . $group)) . '</dt>';
         if(!empty($data['description']))
           $string .= '<dd>' . $data['description'] . '</dd>';
-        $ret[] = $string;
+        $ret[$item['weight']] = $string;
       }
     }
   }
 
+  ksort($ret);
 
   variable_set('wisski_navigator_menus', $saveIDs);
 
