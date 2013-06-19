@@ -299,14 +299,20 @@ function wisski_navigator_add_groups() {
           $string = '<dt>' . l($data['name'], ("navigate/" . $group)) . '</dt>';
           if(!empty($data['description']))
             $string .= '<dd>' . $data['description'] . '</dd>';
-          $ret[$item['weight']] = $string;
+          if(!empty($item['weight']))
+            $ret[$item['weight']] = $string;
+          else
+            $ret[] = $string;
         }
       }
       else {
         $string = '<dt>' . l($data['name'], ("navigate/" . $group)) . '</dt>';
         if(!empty($data['description']))
           $string .= '<dd>' . $data['description'] . '</dd>';
-        $ret[$item['weight']] = $string;
+        if(!empty($item['weight']))
+          $ret[$item['weight']] = $string;
+        else
+          $ret[] = $string;
       }
     }
   }
