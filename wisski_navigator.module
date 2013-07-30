@@ -98,6 +98,7 @@ function wisski_navigator_overview_group($groupid) {
   global $pager_page_array, $pager_total, $pager_total_items;
   
   include_once(drupal_get_path('module', 'wisski_pathbuilder') . '/wisski_pathbuilder.inc');
+
   $groups = wisski_pathbuilder_getGroups();
 
   if(in_array($groupid, $groups)) {
@@ -216,7 +217,7 @@ function wisski_navigator_overview_group($groupid) {
         $uri = $result["x". (floor(count($samepart)/2))];
         $name = wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), $groupdata['id'], $groupdata);
         if($image_support && $image_support == "yes") {
-            $imgs = wisski_pathbuilder_getImages(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), 1);
+            $imgs = wisski_images_getImages(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), 1);
             preg_match('/<img src="(.*?)"/', $imgs, $matches);
             if(!empty($matches[1])) {
                 $value = "<div class='wisski_tileimg'><a href='".$uri."'><img src='".$matches[1]."'/></a></div><a href='".$uri."'>".$name."</a>";
