@@ -132,8 +132,11 @@ function wisski_navigator_overview_group($groupid) {
   // Only take names which are not surrounded by brackets - brackets make them optional
   preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
 
-  preg_match_all('/(\{.*?)(![0-9]*)(.*?\})/',$data['short_name'], $optional_matches);
+  preg_match_all('/(\{.*?)(![0-9]*)(.*?\})/',$groupdata['short_name'], $optional_matches);
   
+  // store the first match in case it is optional
+  $firstmatch = $matches[0][0];
+   
   // if a match is an optional match, kill it!
   foreach($matches[0] as $key => $match) {
     if(in_array($match, $optional_matches[2])) {
@@ -147,6 +150,7 @@ function wisski_navigator_overview_group($groupid) {
   if($matches[0]) {
     foreach($matches[0] as $match) {
       $sparqlparts = wisski_pathbuilder_get_sparql(substr($match, 1), $sparqlcondition, TRUE);        
+      $gotmatch = $match;
       break;
     }
     
@@ -158,15 +162,38 @@ function wisski_navigator_overview_group($groupid) {
       $sparql .= $triple . " . ";
       $countsq .= $triple . " . ";
     }
+    
+    // if the match we are working on is not the first one, the first one was an optional one. Try to get these triples now
+    if($gotmatch != $firstmatch) {
 
+      $firstmatchsparqlparts = wisski_pathbuilder_get_sparql(substr($firstmatch, 1), $sparqlcondition, TRUE);
+      $firstmatchtriples = "";
+      
+      foreach($firstmatchsparqlparts["triples"] as $triple) {
+        $firstmatchtriples .= $triple . " . ";
+      }
+      
+      $firstmatchtriples = str_replace("?x", "?z", $firstmatchtriples);
+      $firstmatchtriples = str_replace("?out", "?optout", $firstmatchtriples);
+      // this is a very implicit assumption which should basically and hopefully hold... :/
+      $firstmatchtriples .= " FILTER ( ?x0 = ?z0 ) . ";
+      $sparql .= " OPTIONAL { " . $firstmatchtriples . " } . "; 
+    }
+    
     $countsq .= $sparqlparts["end"];
     $sparql .= $sparqlparts["end"];
     
-    if(variable_get("wisski_navigator_alphanumeric_sort", 1))
-      $sparql .= (" ORDER BY xsd:integer(?out) LIMIT " . $limit . " OFFSET " . ($page * $limit));  
-    else
+    if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
+      if($gotmatch != $firstmatch) {
+        $sparql .= (" ORDER BY DESC(BOUND(?optout)) ASC(xsd:string(?optout)) (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+      } else {
+        $sparql .= (" ORDER BY (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+      }
+    
+    } else {
       $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));
-
+    }
+    
     $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
     $sum = $sum['result']['rows'][0]['num'];
     $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
