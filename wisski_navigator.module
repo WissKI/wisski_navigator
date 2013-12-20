@@ -89,6 +89,14 @@ function wisski_navigator_visualSettings() {
     '#default_value' => variable_get('wisski_navigator_imageSupport', 'yes'),
   );
 
+  $form['wisski_navigator_fieldset']['wisski_navigator_show_only_with_title'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Show only instances with valid title'),
+    '#description' => t('If enabled, instances that have no fully defined title will be excluded from the list.'),
+    '#return_value' => 1,
+    '#default_value' => variable_get('wisski_navigator_show_only_with_title', TRUE),
+  );
+
   return $form;
 
 }
@@ -147,7 +155,7 @@ function wisski_navigator_overview_group($groupid) {
   $sum = 0;
 
   // any shot names?
-  if($matches[0]) {
+  if(variable_get('wisski_navigator_show_only_with_title', TRUE) && $matches[0]) {
     foreach($matches[0] as $match) {
       $sparqlparts = wisski_pathbuilder_get_sparql(substr($match, 1), $sparqlcondition, TRUE);        
       $gotmatch = $match;
@@ -193,7 +201,6 @@ function wisski_navigator_overview_group($groupid) {
     } else {
       $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));
     }
-    
     $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
     $sum = $sum['result']['rows'][0]['num'];
     $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
