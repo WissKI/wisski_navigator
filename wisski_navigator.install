@@ -1,0 +1,83 @@
+<?php
+/*
+*@author Martin Scholz, unless otherwise said
+*/
+
+/**
+* @author Martin Scholz
+*/
+function wisski_navigator_schema () {
+
+  $schemas = array();
+
+  $schemas['cache_wisski_navigator'] = array(
+    'fields' => array(
+      'uid' => array(
+        'type' => 'int',
+        'size' => 'normal',
+        'default' => 1,
+        'description' => 'the user id',
+      ),
+      'gid' => array(
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'description' => 'the id of the pathbuilder group',
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'description' => 'weight of the instance in the list',
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'description' => 'the node id of the instance',
+      ),
+      'uri' => array(
+        'type' => 'text',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'description' => 'the uri of the instance',
+      ),
+      'label' => array(
+        'type' => 'text',
+        'size' => 'normal',
+        'default' => '',
+        'description' => 'the short name label (title) of the instance',
+      ),
+    ),
+    'primary key' => array('uid', 'gid', 'nid'),
+    'indexes' => array(
+      'uid' => array('uid'),
+      'gid' => array('gid'),
+      'weight' => array('weight'),
+      'nid' => array('nid'),
+      'uri' => array(array('uri', 30)),
+      'uid_gid_uri' => array('uid', 'gid', array('uri', 30)),
+    ), 
+  );
+
+  return $schemas;
+
+}
+
+
+/**
+* @author Martin Scholz
+*/
+function wisski_navigator_install () {
+  drupal_install_schema('wisski_navigator');
+}
+
+
+/**
+* @author Martin Scholz
+*/
+function wisski_navigator_uninstall () {
+  drupal_uninstall_schema('wisski_navigator');
+}
+
+

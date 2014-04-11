@@ -97,13 +97,129 @@ function wisski_navigator_visualSettings() {
     '#default_value' => variable_get('wisski_navigator_show_only_with_title', TRUE),
   );
 
+  $form['wisski_navigator_fieldset']['wisski_navigator_show_only_accessible'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Show only accessible entries'),
+    '#description' => t('If checked, only entries are listed for which the current user has access permissions. Otherwise all entries are listed regardless of user permissions. If your system does not contain instances with diverging access permission, you can savely uncheck this option.'),
+    '#default_value' => variable_get('wisski_navigator_show_only_accessible', FALSE),
+    '#element_validate' => array('wisski_navigator_clear_cache'), // use this as a hook to clear cache when saving settings
+  );
+
   return $form;
 
 }
 
+
+function wisski_navigator_clear_cache() {
+  cache_clear_all('wisski_navigator_cached_', 'cache', TRUE);
+}
+
+
+function wisski_navigator_nodeapi(&$node, $op) {
+  
+  if ($node->type == 'individual' && in_array($op, array('delete', 'delete revision', 'insert', 'update'))) {
+    cache_clear_all('wisski_navigator_cached_', 'cache', TRUE);
+  }
+
+}
+
+
+function wisski_navigator_build_cache($group, $account, $cached) {
+  
+  // we immediately set the cached flag, hopefully to not have a race condition
+  $cached[] = $account->uid;
+  cache_set('wisski_navigator_cached_' . $group['id'], $cached, 'cache', CACHE_TEMPORARY);
+
+  db_query("DELETE FROM {cache_wisski_navigator} WHERE uid = %d AND gid = %d", $account->uid, $group['id']);
+
+  $uris = array(); // array(array(uri, nid, label), ...)
+
+  // we distinguish between user 1 and others as
+  // user 1 sees everything, ie. she has the full list of available instances.
+  // we use her cached list to determine the one of $account
+  // this is hopefully faster than re-executing the sparql query for each user
+  if ($account->uid == 1) {
+    // we only do a sparql query for user 1
+    // all other users use this user's result list
+    
+    $samepart = _wisski_pathbuilder_calculate_group_samepart($group['id']);
+
+    $sparql = ("SELECT ?x WHERE { ?x a <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");
+    $rows = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql, 'rows');
+    
+    foreach ($rows as $row) {
+      $nid = wisski_store_get_nid_for_instance($row['x']);
+      if ($nid === NULL) {
+        // we never show instances that do not have a node
+        // but we trigger a system warning
+        watchdog('wisski', 'Found instance without a node: @uri', array('@uri' => $row['x']), WATCHDOG_WARNING);
+        continue;
+      }
+      $name = trim(wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x']), $group['id'], $group));
+      $uris[] = array($row['x'], $nid, $name);
+    }
+    
+    // user 1 may always see instances without title, don't need to check
+
+    if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
+      // sort the entries according to natural order
+      // if the title is empty, we use the uri, as it is shown instead
+      usort($uris, function ($a, $b) {
+        $label_a = $a[2] == '' ? $a[0] : $a[2];
+        $label_b = $b[2] == '' ? $b[0] : $b[2];
+        return strnatcasecmp($label_a, $label_b);
+      });
+    }
+
+  } else {
+    // for all other users we use the list of user 1 (if needed we build it)
+    // and check the access grants for each node
+    
+    if (!in_array(1, $cached)) {
+      $uris = wisski_navigator_build_cache($group, user_load(1), $cached);
+    } else {
+      $tmp = db_query("SELECT nid, uri, label, weight FROM {cache_wisski_navigator} WHERE uid = %d AND gid = %d ORDER BY weight ASC", 1, $group['id']);
+      while ($row = db_fetch_array($tmp)) {
+        $uris[$row['weight']] = array($row['uri'], $row['nid'], $row['label']);
+      }
+    }
+    
+    $only_with_title = variable_get('wisski_navigator_show_only_with_title_' . $account->uid, variable_get('wisski_navigator_show_only_with_title', TRUE));
+
+    $l = count($uris);
+    for ($i = 0; $i < $l; $i++) {
+      if (($only_with_title && trim($uris[$i][2]) == "") 
+          || !node_access('view', node_load($uris[$i][1]), $account)) {
+        unset($uris[$i]);
+      }
+    }
+
+  }
+  
+  // if no results, we don't need to write anything to db
+  if (empty($uris)) return array();
+
+  // write uris to db, build array for query
+  $values = array();
+  foreach ($uris as $i => &$v) {
+    $values[] = $account->uid;
+    $values[] = $group['id'];
+    $values[] = $i;
+    $values[] = $v[1];
+    $values[] = $v[0];
+    $values[] = $v[2];
+  }
+  db_query("INSERT INTO {cache_wisski_navigator} (uid, gid, weight, nid, uri, label) VALUES " . join(", ", array_fill(0, count($uris), "(%d, %d, %d, %d, '%s', '%s')")), $values);
+
+  return $uris;
+  
+}
+
+
 function wisski_navigator_overview_group($groupid) {
 
   global $pager_page_array, $pager_total, $pager_total_items;
+  global $user;
   
   include_once(drupal_get_path('module', 'wisski_pathbuilder') . '/wisski_pathbuilder.inc');
 
@@ -123,155 +239,179 @@ function wisski_navigator_overview_group($groupid) {
   
   $element = 0;
   $limit = variable_get('wisski_navigator_resultItemsPerPage', 30);
-  
-  $samepart = _wisski_pathbuilder_calculate_group_samepart($groupdata['id']);
 
-  global $user;
-  $vars = variable_get("wisski_pathbuilder_templateids", array());
+  if (variable_get('wisski_navigator_show_only_accessible', FALSE)) {
 
-  if(!isset($vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]]) ||
-    $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] != $groupdata['id']) {
-    $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] = $groupdata['id'];
-    variable_set("wisski_pathbuilder_templateids", $vars);
-  }
-
-  /* We should not skip this, although the name generation got more intelligent */
-  //preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
-  // Only take names which are not surrounded by brackets - brackets make them optional
-  preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
-
-  preg_match_all('/(\{.*?)(![0-9]*)(.*?\})/',$groupdata['short_name'], $optional_matches);
-  
-  // store the first match in case it is optional
-  $firstmatch = $matches[0][0];
-   
-  // if a match is an optional match, kill it!
-  foreach($matches[0] as $key => $match) {
-    if(in_array($match, $optional_matches[2])) {
-      unset($matches[0][$key]);
-    }    
-  }
-
-  $sum = 0;
-
-  // any shot names?
-  if(variable_get('wisski_navigator_show_only_with_title', TRUE) && $matches[0]) {
-    foreach($matches[0] as $match) {
-      $sparqlparts = wisski_pathbuilder_get_sparql(substr($match, 1), $sparqlcondition, TRUE);        
-      $gotmatch = $match;
-      break;
-    }
-    
-    $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { ");
-
-    $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ");
-  
-    foreach($sparqlparts["triples"] as $triple) {
-      $sparql .= $triple . " . ";
-      $countsq .= $triple . " . ";
-    }
-    
-    // if the match we are working on is not the first one, the first one was an optional one. Try to get these triples now
-    if($gotmatch != $firstmatch) {
-
-      $firstmatchsparqlparts = wisski_pathbuilder_get_sparql(substr($firstmatch, 1), $sparqlcondition, TRUE);
-      $firstmatchtriples = "";
-      
-      foreach($firstmatchsparqlparts["triples"] as $triple) {
-        $firstmatchtriples .= $triple . " . ";
-      }
-      
-      $firstmatchtriples = str_replace("?x", "?z", $firstmatchtriples);
-      $firstmatchtriples = str_replace("?out", "?optout", $firstmatchtriples);
-      // this is a very implicit assumption which should basically and hopefully hold... :/
-      $firstmatchtriples .= " FILTER ( ?x0 = ?z0 ) . ";
-      $sparql .= " OPTIONAL { " . $firstmatchtriples . " } . "; 
-    }
-    
-    $countsq .= $sparqlparts["end"];
-    $sparql .= $sparqlparts["end"];
-    
-    if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
-      if($gotmatch != $firstmatch) {
-        $sparql .= (" ORDER BY DESC(BOUND(?optout)) ASC(xsd:string(?optout)) (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
-      } else {
-        $sparql .= (" ORDER BY (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
-      }
-    
+    $cached = cache_get('wisski_navigator_cached_' . $groupdata['id']);
+    if ($cached === 0) {
+      $cached = array();
     } else {
-      $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));
+      $cached = $cached->data;
     }
-    $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
-    $sum = $sum['result']['rows'][0]['num'];
-    $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+
+    if (!in_array($user->uid, $cached)) {
+      wisski_navigator_build_cache($groupdata, $user, $cached);
+    }
+
+    $tmp = pager_query("SELECT uri, label FROM {cache_wisski_navigator} WHERE uid = %d AND gid = %d ORDER BY weight", $limit, $element, NULL, $user->uid, $groupdata['id']);
+    
+    $results = array();
+    while ($row = db_fetch_array($tmp)) {
+      $results[$row['uri']] = $row['label'];
+    }
 
   } else {
-    $sparql = ("SELECT (COUNT(?x) AS ?z) WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
 
-    $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+    $samepart = _wisski_pathbuilder_calculate_group_samepart($groupdata['id']);
 
-    $sum = $out['result']['rows'][0]['z'];
+    $vars = variable_get("wisski_pathbuilder_templateids", array());
 
-    $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");
-    $sparql .= (" ORDER BY ?x" . (floor(count($samepart)/2)) . " LIMIT " . $limit . " OFFSET " . ($page * $limit));
+    if(!isset($vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]]) ||
+      $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] != $groupdata['id']) {
+      $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] = $groupdata['id'];
+      variable_set("wisski_pathbuilder_templateids", $vars);
+    }
 
-    $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+    /* We should not skip this, although the name generation got more intelligent */
+    //preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
+    // Only take names which are not surrounded by brackets - brackets make them optional
+    preg_match_all('/![0-9]*/',$groupdata['short_name'], $matches);
+
+    preg_match_all('/(\{.*?)(![0-9]*)(.*?\})/',$groupdata['short_name'], $optional_matches);
+    
+    // store the first match in case it is optional
+    $firstmatch = $matches[0][0];
+     
+    // if a match is an optional match, kill it!
+    foreach($matches[0] as $key => $match) {
+      if(in_array($match, $optional_matches[2])) {
+        unset($matches[0][$key]);
+      }    
+    }
+
+    $sum = 0;
+
+    // any shot names?
+    if(variable_get('wisski_navigator_show_only_with_title_' . $user->uid, variable_get('wisski_navigator_show_only_with_title', TRUE) && $matches[0])) {
+      foreach($matches[0] as $match) {
+        $sparqlparts = wisski_pathbuilder_get_sparql(substr($match, 1), $sparqlcondition, TRUE);        
+        $gotmatch = $match;
+        break;
+      }
+      
+      $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { ");
+
+      $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ");
+    
+      foreach($sparqlparts["triples"] as $triple) {
+        $sparql .= $triple . " . ";
+        $countsq .= $triple . " . ";
+      }
+      
+      // if the match we are working on is not the first one, the first one was an optional one. Try to get these triples now
+      if($gotmatch != $firstmatch) {
+
+        $firstmatchsparqlparts = wisski_pathbuilder_get_sparql(substr($firstmatch, 1), $sparqlcondition, TRUE);
+        $firstmatchtriples = "";
+        
+        foreach($firstmatchsparqlparts["triples"] as $triple) {
+          $firstmatchtriples .= $triple . " . ";
+        }
+        
+        $firstmatchtriples = str_replace("?x", "?z", $firstmatchtriples);
+        $firstmatchtriples = str_replace("?out", "?optout", $firstmatchtriples);
+        // this is a very implicit assumption which should basically and hopefully hold... :/
+        $firstmatchtriples .= " FILTER ( ?x0 = ?z0 ) . ";
+        $sparql .= " OPTIONAL { " . $firstmatchtriples . " } . "; 
+      }
+      
+      $countsq .= $sparqlparts["end"];
+      $sparql .= $sparqlparts["end"];
+      
+      if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
+        if($gotmatch != $firstmatch) {
+          $sparql .= (" ORDER BY DESC(BOUND(?optout)) ASC(xsd:string(?optout)) (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+        } else {
+          $sparql .= (" ORDER BY (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+        }
+      
+      } else {
+        $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));
+      }
+      
+      $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
+      $sum = $sum['result']['rows'][0]['num'];
+      $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+
+    } else {
+      $sparql = ("SELECT (COUNT(?x) AS ?z) WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
+
+      $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+
+      $sum = $out['result']['rows'][0]['z'];
+
+      $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");
+      $sparql .= (" ORDER BY ?x" . (floor(count($samepart)/2)) . " LIMIT " . $limit . " OFFSET " . ($page * $limit));
+
+      $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
+
+    }
+    
+    $results = array();
+    foreach ($out['result']['rows'] as $row) {
+      $results[$row["x". (floor(count($samepart)/2))]] = trim(wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row["x". (floor(count($samepart)/2))]), $groupdata['id'], $groupdata));
+    }
+
+    $pager_total_items[$element] = $sum;
+    $pager_total[$element] = ceil($pager_total_items[$element] / $limit);
+    $pager_page_array[$element] = max(0, min((int)  $pager_page_array[$element], ((int) $pager_total[$element]) - 1));
 
   }
 
-  
-  $results = $out['result']['rows'];
-
-  $pager_total_items[$element] = $sum;
-
-  $pager_total[$element] = ceil($pager_total_items[$element] / $limit);
-  $pager_page_array[$element] = max(0, min((int)
-  $pager_page_array[$element], ((int) $pager_total[$element]) - 1));
+  $sum = $pager_total_items[$element];
 
   $prefix = "";
     
   $begin = ($page * $limit) + 1;
-  $end = $begin - 1 + count($results) ;
+  $end = $begin - 1 + count($results);
   
   // get the correct style. This is used below.
-  $style = variable_get('wisski_navigator_styleResultPage', 'list');
+  $style = variable_get('wisski_navigator_styleResultPage_' . $groupdata['id'], variable_get('wisski_navigator_styleResultPage', 'list'));
   // images? suppose yes!
-  $image_support = variable_get('wisski_navigator_imageSupport', 'yes');
+  $image_support = variable_get('wisski_navigator_imageSupport_' . $groupdata['id'], variable_get('wisski_navigator_imageSupport', 'yes'));
   
-  //$prefix = '<div id="wki-navi-count"> Treffer ' . $begin . ' - ' . $end . ' von insgesamt ' . $sum . '</div>';
   // formulate a nice headline
   $form['heading'] = array(
     '#prefix' => '<label>',
     '#suffix' => '</label>',
-    '#value' => t("Hits") . " " . $begin . " - " . min($end,$sum) . " " . t("of") . " " . $sum . ":",
+    '#value' => t("Hits @s - @e of @m:", array('@s' => $begin, '@e' => min($end, $sum), '@m' => $sum)),
   );
 
-    $list = array();
-    foreach($results as $result) {
-        $uri = $result["x". (floor(count($samepart)/2))];
-        $name = wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), $groupdata['id'], $groupdata);
-        if($image_support && $image_support == "yes") {
-            $imgs = wisski_images_getImages(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), 1);
-            preg_match('/<img src="(.*?)"/', $imgs, $matches);
-            if(!empty($matches[1])) {
-                $value = "<div class='wisski_tileimg'><a href='".$uri."'><img src='".$matches[1]."'/></a></div><a href='".$uri."'>".$name."</a>";
-            } else {
-                $nopic = path_to_theme() . '/pics/img_nopic.png';
-                global $base_url;
-                if(is_file($nopic)) {
-                    $value = "<div class='wisski_tileimg'><a href='".$uri."'><img src='".$base_url."/".$nopic."'/></a></div><a href='".$uri."'>".$name."</a>";
-                } else {
-                    $value = "<a href='".$uri."'>".$name."</a>";
-                }    
-            }
+  $list = array();
+  foreach($results as $uri => $name) {
+    if ($name == '') $name = wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri);
+    if($image_support && $image_support == "yes" && function_exists('wisski_images_getImages')) {
+      $imgs = wisski_images_getImages(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($uri), 1);
+      preg_match('/<img src="(.*?)"/', $imgs, $matches);
+      if(!empty($matches[1])) {
+        $value = "<div class='wisski_tileimg'><a href='".$uri."'><img src='".$matches[1]."'/></a></div><a href='".$uri."'>".$name."</a>";
+      } else {
+        $nopic = path_to_theme() . '/pics/img_nopic.png';
+        global $base_url;
+        if(is_file($nopic)) {
+            $value = "<div class='wisski_tileimg'><a href='".$uri."'><img src='".$base_url."/".$nopic."'/></a></div><a href='".$uri."'>".$name."</a>";
         } else {
             $value = "<a href='".$uri."'>".$name."</a>";
-        }
-        //$list[] = l($name, $result["x". (floor(count($samepart)/2))], array('html' => 'true'));
-        $list[] = array('data' => $value, 'class'=> 'wisski_resultitem');
+        }    
+      }
+    } else {
+      $value = "<a href='".$uri."'>".$name."</a>";
     }
+    //$list[] = l($name, $result["x". (floor(count($samepart)/2))], array('html' => 'true'));
+    $list[] = array('data' => $value, 'class'=> 'wisski_resultitem');
+  }
 
-    return drupal_render($form['heading']) . theme('item_list', $list, NULL, 'ul', array('class' => ($style == 'list' ? "wisski_resultlist" : "wisski_resulttiles"))) . theme('pager', NULL, 10, 0);
+  return drupal_render($form['heading']) . theme('item_list', $list, NULL, 'ul', array('class' => ($style == 'list' ? "wisski_resultlist" : "wisski_resulttiles"))) . theme('pager', NULL, 10, 0);
 }
 
 function wisski_navigator_overview($form_state = NULL) {
@@ -281,8 +421,8 @@ function wisski_navigator_overview($form_state = NULL) {
     '#type' => 'markup',
     '#prefix' => '<p>',
     '#suffix' => '</p>',
-     '#value' => t('Navigate the content'),
-       '#weight' => 0,
+    '#value' => t('Navigate the content'),
+    '#weight' => 0,
   );
               
   return drupal_render($form) . theme('item_list', $list);
@@ -330,7 +470,7 @@ function wisski_navigator_add_groups() {
     $saveIDs[$id] = $group;
     if($item['hidden'] == 0) { 
       if(module_exists("menu_per_role")) {
-      	if(is_null(_menu_per_role_access($item))) {
+        if(is_null(_menu_per_role_access($item))) {
           $string = '<dt>' . l($data['name'], ("navigate/" . $group)) . '</dt>';
           if(!empty($data['description']))
             $string .= '<dd>' . $data['description'] . '</dd>';
