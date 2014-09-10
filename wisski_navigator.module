@@ -325,18 +325,63 @@ function wisski_navigator_overview_group($groupid) {
         $sparql .= " OPTIONAL { " . $firstmatchtriples . " } . "; 
       }
       
-      $countsq .= $sparqlparts["end"];
-      $sparql .= $sparqlparts["end"];
+      // we don't need these here
+      //$countsq .= $sparqlparts["end"];
+      //$sparql .= $sparqlparts["end"];
       
-      if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
-        if($gotmatch != $firstmatch) {
-          $sparql .= (" ORDER BY DESC(BOUND(?optout)) ASC(xsd:string(?optout)) (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
-        } else {
-          $sparql .= (" ORDER BY (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+      // order another field?
+      $orderpath = variable_get("wisski_order_path", array());
+      
+      // which field?
+      $orderpath = $orderpath[$groupid];
+      
+      if(!empty($orderpath)) {
+        // get the path for the order by
+        $sparqlorderparts = wisski_pathbuilder_get_sparql($orderpath, $sparqlcondition, TRUE);
+      
+        $sparqlorder = "";
+        
+        foreach($sparqlorderparts["triples"] as $triple) {
+          $sparqlorder .= $triple . " . ";
         }
+        
+        $sparqlorder = str_replace("?x", "?u", $sparqlorder);
+        $sparqlorder = str_replace("?out", "?orderout", $sparqlorder);
+        $sparqlorder = str_replace("?u0", "?x0", $sparqlorder);
+        
+        $sparql .= " OPTIONAL { " . $sparqlorder . " } . ";
+
+
+        // add }
+        $countsq .= $sparqlparts["end"];
+        $sparql .= $sparqlparts["end"];
+                         
       
+        if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
+          if($gotmatch != $firstmatch) {
+            $sparql .= (" ORDER BY DESC(BOUND(?orderout)) ASC(xsd:string(?orderout)) (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+          } else {
+            $sparql .= (" ORDER BY (str(?orderout)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+          }
+      
+        } else {
+          $sparql .= (" ORDER BY ?orderout LIMIT " . $limit . " OFFSET " . ($page * $limit));
+        }
       } else {
-        $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));
+      
+        // add }
+        $countsq .= $sparqlparts["end"];
+        $sparql .= $sparqlparts["end"];
+        if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
+          if($gotmatch != $firstmatch) {
+            $sparql .= (" ORDER BY DESC(BOUND(?optout)) ASC(xsd:string(?optout)) (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+          } else {
+            $sparql .= (" ORDER BY (str(?out)) LIMIT " . $limit . " OFFSET " . ($page * $limit));
+          }
+      
+        } else {
+          $sparql .= (" ORDER BY ?out LIMIT " . $limit . " OFFSET " . ($page * $limit));
+        }
       }
       
       $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
