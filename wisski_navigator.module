@@ -321,7 +321,10 @@ function wisski_navigator_overview_group($groupid) {
         $firstmatchtriples = str_replace("?x", "?z", $firstmatchtriples);
         $firstmatchtriples = str_replace("?out", "?optout", $firstmatchtriples);
         // this is a very implicit assumption which should basically and hopefully hold... :/
-        $firstmatchtriples .= " FILTER ( ?x0 = ?z0 ) . ";
+        //$firstmatchtriples .= " FILTER ( ?x0 = ?z0 ) . ";
+        // faster:
+        $firstmatchtriples = str_replace("?z0", "?x0", $firstmatchtriples);
+        
         $sparql .= " OPTIONAL { " . $firstmatchtriples . " } . "; 
       }
       
@@ -336,22 +339,31 @@ function wisski_navigator_overview_group($groupid) {
       $orderpath = $orderpath[$groupid];
       
       if(!empty($orderpath)) {
-        // get the path for the order by
-        $sparqlorderparts = wisski_pathbuilder_get_sparql($orderpath, $sparqlcondition, TRUE);
-      
-        $sparqlorder = "";
         
-        foreach($sparqlorderparts["triples"] as $triple) {
-          $sparqlorder .= $triple . " . ";
+        // if the orderpath is the firstmatch
+        if($orderpath == substr($firstmatch, 1)) {
+          // we already have this in the query
+          $sparql = str_replace("?optout", "?orderout", $sparql);
+        } else if($orderpath == substr($gotmatch, 1)) {
+          // in this case we don't have to do anything.
+        } else {
+        
+          // get the path for the order by
+          $sparqlorderparts = wisski_pathbuilder_get_sparql($orderpath, $sparqlcondition, TRUE);
+      
+          $sparqlorder = "";
+        
+          foreach($sparqlorderparts["triples"] as $triple) {
+            $sparqlorder .= $triple . " . ";
+          }
+        
+          $sparqlorder = str_replace("?x", "?u", $sparqlorder);
+          $sparqlorder = str_replace("?out", "?orderout", $sparqlorder);
+          $sparqlorder = str_replace("?u0", "?x0", $sparqlorder);
+        
+          $sparql .= " OPTIONAL { " . $sparqlorder . " } . ";
         }
         
-        $sparqlorder = str_replace("?x", "?u", $sparqlorder);
-        $sparqlorder = str_replace("?out", "?orderout", $sparqlorder);
-        $sparqlorder = str_replace("?u0", "?x0", $sparqlorder);
-        
-        $sparql .= " OPTIONAL { " . $sparqlorder . " } . ";
-
-
         // add }
         $countsq .= $sparqlparts["end"];
         $sparql .= $sparqlparts["end"];
