@@ -299,7 +299,7 @@ function wisski_navigator_overview_group($groupid) {
         break;
       }
       
-      $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { ");
+      $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE {");
 
       $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ");
     
@@ -396,6 +396,8 @@ function wisski_navigator_overview_group($groupid) {
         }
       }
       
+      $countsq .= "}";
+            
       $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
       $sum = $sum['result']['rows'][0]['num'];
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
