@@ -435,13 +435,13 @@ function wisski_navigator_overview_group($groupid) {
         $sparql .= (" ORDER BY DESC(BOUND(?orderout)) ASC(xsd:string(?orderout)) (str(?x" . (floor(count($samepart)/2)) . ")) LIMIT " . $limit . " OFFSET " . ($page * $limit));
       
       } else {
-        $sparql .= "}";
+      
         $sparql .= (" ORDER BY ?x" . (floor(count($samepart)/2)) . " LIMIT " . $limit . " OFFSET " . ($page * $limit));
       }
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
 
     }
-    
+        
     $results = array();
     foreach ($out['result']['rows'] as $row) {
       $results[$row["x". (floor(count($samepart)/2))]] = trim(wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row["x". (floor(count($samepart)/2))]), $groupdata['id'], $groupdata));
