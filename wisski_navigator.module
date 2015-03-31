@@ -301,7 +301,7 @@ function wisski_navigator_overview_group($groupid) {
       
       $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE {");
 
-      $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ");
+      $sparql = ("SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE { ");
     
       foreach($sparqlparts["triples"] as $triple) {
         $sparql .= $triple . " . ";
