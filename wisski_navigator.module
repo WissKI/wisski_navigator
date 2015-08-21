@@ -300,6 +300,9 @@ function wisski_navigator_overview_group($groupid) {
       }
       
       $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE {");
+      if(variable_get('wisski_local_store',1)) {
+        $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE {");
+      }
 
       $sparql = ("SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE { ");
     
@@ -396,8 +399,10 @@ function wisski_navigator_overview_group($groupid) {
         }
       }
       
-      $countsq .= "}";
-            
+      if(variable_get('wisski_local_store',1) !== 1) {
+        $countsq .= "}";
+      }
+           
       $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
       $sum = $sum['result']['rows'][0]['num'];
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
