@@ -300,6 +300,8 @@ function wisski_navigator_overview_group($groupid) {
       }
       
       $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE {");
+      
+      // if it is a local arc2 store, we don't do subqueries!
       if(variable_get('wisski_local_store',1)) {
         $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE {");
       }
@@ -337,6 +339,7 @@ function wisski_navigator_overview_group($groupid) {
       
       // order another field?
       $orderpath = variable_get("wisski_order_path", array());
+#      variable_set("wisski_order_path", array("37" => array(38, 50)));      
       
       // which field?
       $orderpath = $orderpath[$groupid];
@@ -344,7 +347,7 @@ function wisski_navigator_overview_group($groupid) {
       // backward compatibility
       if(!empty($orderpath) && !is_array($orderpath)) 
         $orderpath = array($orderpath);
-            
+                  
       // if we should order in any way
       if(!empty($orderpath)) {
         
@@ -354,7 +357,6 @@ function wisski_navigator_overview_group($groupid) {
         // iterate the orderpaths
         foreach($orderpath as $currpathid => $currpath) {
 
-          
           // if the orderpath is the firstmatch and the firstmatch is not the gotmatch
           if($currpath == substr($firstmatch, 1) && $firstmatch != $gotmatch) {
             // we already have this in the query
@@ -364,10 +366,12 @@ function wisski_navigator_overview_group($groupid) {
             
             // if we are in alphanumeric mode we act like it is a string
             if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
-              $sparqlorder .= ("(str(?out)) ");
+              $orderby .= ("(str(?out)) ");
             } else { // else just put it there.
-              $sparqlorder .= ("?out ");
+              $orderby .= ("?out ");
             }
+            // we can savely skip the rest...
+            continue;
           } else {
         
             // get the path for the order by
@@ -404,7 +408,7 @@ function wisski_navigator_overview_group($groupid) {
         
         // attach the sparqlorder to the sparql
         $sparql .= $orderby;
-      
+ 
       } else {
       
         // add }
@@ -443,6 +447,13 @@ function wisski_navigator_overview_group($groupid) {
 
       $orderpath = variable_get("wisski_order_path", array());
       $orderpath = $orderpath[$groupid];
+      
+      // backward compatibility
+      if(!empty($orderpath) && !is_array($orderpath)) 
+        $orderpath = array($orderpath);
+      
+      // the below code is not multisort-able...
+      $orderpath = array_shift($orderpath);
       
       if(!empty($orderpath)) {
         // get the path for the order by
