@@ -15,8 +15,8 @@ function wisski_navigator_menu() {
   
   $items['navigate/%'] = array(
     'description' => 'This is the WissKI-Template Navigator.',
-    'page callback' => 'wisski_navigator_overview_group',
-    'page arguments' => array(1),
+    'page callback' => 'drupal_get_form', //'wisski_navigator_overview_group',
+    'page arguments' => array('wisski_navigator_overview_group', 1),
     'access arguments' => array('wisski access templateView'),
     'type' => MENU_NORMAL_ITEM,
   );
@@ -34,6 +34,10 @@ function wisski_navigator_menu() {
 
   return $items;
   
+}
+
+function wisski_navigator_perm() {
+  return array('wisski change navigation sorting');
 }
 
 function wisski_navigator_form_alter(&$form, &$form_state, $form_id) {
@@ -104,7 +108,7 @@ function wisski_navigator_visualSettings() {
     '#default_value' => variable_get('wisski_navigator_show_only_accessible', FALSE),
     '#element_validate' => array('wisski_navigator_clear_cache'), // use this as a hook to clear cache when saving settings
   );
-
+  
   return $form;
 
 }
@@ -215,8 +219,18 @@ function wisski_navigator_build_cache($group, $account, $cached) {
   
 }
 
+function wisski_navigator_overview_group_submit($form, $form_state) {
+  $sorts = array();
+  drupal_set_message(serialize($form_state['values']));
+  foreach($form_state['values'] as $key => $value) {
+    if(strpos($key, 'wisskivalue_sort') !== FALSE) {
+      $sorts[] = $value;
+    }
+  }
+  variable_set("wisski_order_path", array(arg(1) => $sorts));
+}
 
-function wisski_navigator_overview_group($groupid) {
+function wisski_navigator_overview_group($formdings, $groupid) {
 
   global $pager_page_array, $pager_total, $pager_total_items;
   global $user;
@@ -236,7 +250,7 @@ function wisski_navigator_overview_group($groupid) {
   $page = isset($_GET['page']) ? $_GET['page'] : 0;
   
   $pager_page_array = explode(',', $page);
-  
+
   $element = 0;
   $limit = variable_get('wisski_navigator_resultItemsPerPage', 30);
 
@@ -339,8 +353,12 @@ function wisski_navigator_overview_group($groupid) {
       
       // order another field?
       $orderpath = variable_get("wisski_order_path", array());
-#      variable_set("wisski_order_path", array("37" => array(38, 50)));      
-      
+
+      if(!empty($orderpath) && is_array($orderpath) && is_array($orderpath[$groupid]) ) {
+        $orderpath[$groupid] = array_unique($orderpath[$groupid]);
+        variable_set("wisski_order_path", $orderpath);
+      }
+#      variable_set("wisski_order_path", array());
       // which field?
       $orderpath = $orderpath[$groupid];
       
@@ -356,6 +374,9 @@ function wisski_navigator_overview_group($groupid) {
         
         // iterate the orderpaths
         foreach($orderpath as $currpathid => $currpath) {
+
+          if(empty($currpath))
+            continue;
 
           // if the orderpath is the firstmatch and the firstmatch is not the gotmatch
           if($currpath == substr($firstmatch, 1) && $firstmatch != $gotmatch) {
@@ -408,7 +429,7 @@ function wisski_navigator_overview_group($groupid) {
         
         // attach the sparqlorder to the sparql
         $sparql .= $orderby;
- 
+        
       } else {
       
         // add }
@@ -451,7 +472,7 @@ function wisski_navigator_overview_group($groupid) {
       // backward compatibility
       if(!empty($orderpath) && !is_array($orderpath)) 
         $orderpath = array($orderpath);
-      
+            
       // the below code is not multisort-able...
       $orderpath = array_shift($orderpath);
       
@@ -506,12 +527,72 @@ function wisski_navigator_overview_group($groupid) {
   // images? suppose yes!
   $image_support = variable_get('wisski_navigator_imageSupport_' . $groupdata['id'], variable_get('wisski_navigator_imageSupport', 'yes'));
   
+  $form = array();
+  
   // formulate a nice headline
   $form['heading'] = array(
     '#prefix' => '<label>',
     '#suffix' => '</label>',
     '#value' => t("Hits @s - @e of @m:", array('@s' => $begin, '@e' => min($end, $sum), '@m' => $sum)),
   );
+
+
+  if(user_access('wisski change navigation sorting')) {  
+    $list = wisski_pathbuilder_getEnabledInternaMembers($groupid, TRUE, TRUE);
+    
+    $namedlist = array(0 => t('- Select -'));
+  
+    foreach($list as $id) {
+      $data =  wisski_pathbuilder_getPathData($id);    
+      $namedlist[$id] = $data['name'];
+    }
+    
+    $orderpath = variable_get("wisski_order_path", array());
+
+    // which field?
+    $orderpath = $orderpath[$groupid];
+  
+    // backward compatibility
+    if(!empty($orderpath) && !is_array($orderpath)) 
+      $orderpath = array($orderpath);
+
+    $form['sorting'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Order'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#prefix' => "<label id='wki-navigate-sort' style='float:right'>",
+      '#suffix' => '</label>',
+    );
+    // if we should order in any way
+    if(!empty($orderpath)) {
+      foreach($orderpath as $pathid => $path) {
+      
+        if(empty($path))
+          continue;
+        
+        $form['sorting']['wisskivalue_sort' . $pathid] = array(
+          '#type' => 'select',
+          '#title' => t('Order by'),
+          '#default_value' => isset($path) ? $path : 0,
+          '#options' => $namedlist,
+        );
+      }    
+    }
+  
+    $form['sorting']['wisskivalue_sort9999999999'] = array(
+      '#type' => 'select',
+      '#title' => t('Order by'),
+      '#default_value' => 0,
+      '#options' => $namedlist,
+    );
+  
+    $form['sorting']['sort_submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Save'),
+//    '#submit' => array('blubb'),
+    );
+  }
 
   $list = array();
   foreach($results as $uri => $name) {
@@ -537,7 +618,12 @@ function wisski_navigator_overview_group($groupid) {
     $list[] = array('data' => $value, 'class'=> 'wisski_resultitem');
   }
 
-  return drupal_render($form['heading']) . theme('item_list', $list, NULL, 'ul', array('class' => ($style == 'list' ? "wisski_resultlist" : "wisski_resulttiles"))) . theme('pager', NULL, 10, 0);
+  $form['list'] = array(
+    '#value' => theme('item_list', $list, NULL, 'ul', array('id' => 'wki-navigate-list', 'class' => ($style == 'list' ? "wisski_resultlist" : "wisski_resulttiles"))) . theme('pager', NULL, 10, 0),
+  );
+
+  //return drupal_render($form['heading']) . drupal_render($form['sort']) . drupal_render($form['sort_submit']) . theme('item_list', $list, NULL, 'ul', array('id' => 'wki-navigate-list', 'class' => ($style == 'list' ? "wisski_resultlist" : "wisski_resulttiles"))) . theme('pager', NULL, 10, 0);
+  return $form;
 }
 
 function wisski_navigator_overview($form_state = NULL) {
