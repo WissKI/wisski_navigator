@@ -472,6 +472,8 @@ function wisski_navigator_overview_group($formdings, $groupid) {
       // backward compatibility
       if(!empty($orderpath) && !is_array($orderpath)) 
         $orderpath = array($orderpath);
+      else
+        $orderpath = array();
             
       // the below code is not multisort-able...
       $orderpath = array_shift($orderpath);
