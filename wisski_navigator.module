@@ -387,7 +387,7 @@ function wisski_navigator_overview_group($formdings, $groupid) {
             
             // if we are in alphanumeric mode we act like it is a string
             if(variable_get("wisski_navigator_alphanumeric_sort", 1)) {
-              $orderby .= ("(str(?out)) ");
+              $orderby .= ("DESC(BOUND(?out)) ASC(str(?out)) ");
             } else { // else just put it there.
               $orderby .= ("?out ");
             }
@@ -429,7 +429,7 @@ function wisski_navigator_overview_group($formdings, $groupid) {
         
         // attach the sparqlorder to the sparql
         $sparql .= $orderby;
-        
+
       } else {
       
         // add }
@@ -454,7 +454,7 @@ function wisski_navigator_overview_group($formdings, $groupid) {
       $sum = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($countsq);
       $sum = $sum['result']['rows'][0]['num'];
 
-      
+
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
 
     } else {
@@ -464,7 +464,7 @@ function wisski_navigator_overview_group($formdings, $groupid) {
 
       $sum = $out['result']['rows'][0]['z'];
 
-      $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");
+      $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> ");
 
       $orderpath = variable_get("wisski_order_path", array());
       $orderpath = $orderpath[$groupid];
@@ -472,8 +472,6 @@ function wisski_navigator_overview_group($formdings, $groupid) {
       // backward compatibility
       if(!empty($orderpath) && !is_array($orderpath)) 
         $orderpath = array($orderpath);
-      else
-        $orderpath = array();
             
       // the below code is not multisort-able...
       $orderpath = array_shift($orderpath);
@@ -492,16 +490,18 @@ function wisski_navigator_overview_group($formdings, $groupid) {
         $sparqlorder = str_replace("?out", "?orderout", $sparqlorder);
         $sparqlorder = str_replace("?u0", "?x0", $sparqlorder);
       
-        $sparql .= " OPTIONAL { " . $sparqlorder . " } . ";
+        $sparql .=  " . OPTIONAL { " . $sparqlorder . " } . ";
       
         $sparql .= "}";
         
         $sparql .= (" ORDER BY DESC(BOUND(?orderout)) ASC(xsd:string(?orderout)) (str(?x" . (floor(count($samepart)/2)) . ")) LIMIT " . $limit . " OFFSET " . ($page * $limit));
       
       } else {
-      
+        $sparql .= "}";
         $sparql .= (" ORDER BY ?x" . (floor(count($samepart)/2)) . " LIMIT " . $limit . " OFFSET " . ($page * $limit));
       }
+      
+      
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
 
     }
@@ -666,11 +666,6 @@ function wisski_navigator_add_groups() {
     $data = wisski_pathbuilder_getPathData($group);
     if(!($data['enabled']))
       continue;
-      
-    if(variable_get("wisski_find_show_only_main_groups", 1))
-      if($data['group_id'] != 0)
-        continue;
-      
     $item = array();
 
     $item['link_path'] = ("navigate/" . $group);
