@@ -220,6 +220,7 @@ function wisski_navigator_build_cache($group, $account, $cached) {
 }
 
 function wisski_navigator_overview_group_submit($form, $form_state) {
+    
   $sorts = array();
 
   foreach($form_state['values'] as $key => $value) {
@@ -227,7 +228,12 @@ function wisski_navigator_overview_group_submit($form, $form_state) {
       $sorts[] = $value;
     }
   }
-  variable_set("wisski_order_path", array(arg(1) => $sorts));
+  
+  $all_sorts = variable_get("wisski_order_path", array());
+  
+  $all_sorts[arg(1)] = $sorts;
+  
+  variable_set("wisski_order_path", $all_sorts);
 }
 
 function wisski_navigator_overview_group($formdings, $groupid) {
