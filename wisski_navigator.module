@@ -318,7 +318,7 @@ function wisski_navigator_overview_group($formdings, $groupid) {
         $gotmatch = $match;
         break;
       }
-      
+            
       $countsq = ("SELECT DISTINCT (count(?x" . (floor(count($samepart)/2)) . ") as ?num) WHERE { SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE {");
       
       // if it is a local arc2 store, we don't do subqueries!
@@ -464,6 +464,7 @@ function wisski_navigator_overview_group($formdings, $groupid) {
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
 
     } else {
+
       $sparql = ("SELECT (COUNT(?x) AS ?z) WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
 
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
@@ -480,7 +481,8 @@ function wisski_navigator_overview_group($formdings, $groupid) {
         $orderpath = array($orderpath);
             
       // the below code is not multisort-able...
-      $orderpath = array_shift($orderpath);
+      if(!empty($orderpath))
+        $orderpath = array_shift($orderpath);
       
       if(!empty($orderpath)) {
         // get the path for the order by
