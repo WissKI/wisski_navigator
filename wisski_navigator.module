@@ -465,13 +465,13 @@ function wisski_navigator_overview_group($formdings, $groupid) {
 
     } else {
 
-      $sparql = ("SELECT (COUNT(?x) AS ?z) WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
+      $sparql = ("SELECT DISTINCT (COUNT(?x) AS ?z) WHERE { ?x <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> }");   
 
       $out = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql);
 
       $sum = $out['result']['rows'][0]['z'];
 
-      $sparql = ("SELECT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> ");
+      $sparql = ("SELECT DISTINCT ?x" . (floor(count($samepart)/2)) . " WHERE { ?x" . (floor(count($samepart)/2)) . " <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace("rdf:type") . "> <" . $samepart["x" . (floor(count($samepart)/2))] . "> ");
 
       $orderpath = variable_get("wisski_order_path", array());
       $orderpath = $orderpath[$groupid];
