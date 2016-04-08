@@ -286,6 +286,11 @@ function wisski_navigator_overview_group($formdings, $groupid) {
 
     $vars = variable_get("wisski_pathbuilder_templateids", array());
 
+    $lastseen = variable_get("wisski_pathbuilder_last_seen_templateids", array());
+    $lastseen[$samepart["x" . (floor(count($samepart)/2))]] = time();
+    variable_set("wisski_pathbuilder_last_seen_templateids", $lastseen);
+            
+
     if(!isset($vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]]) ||
       $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] != $groupdata['id']) {
       $vars[$user->uid][$samepart["x" . (floor(count($samepart)/2))]] = $groupdata['id'];
