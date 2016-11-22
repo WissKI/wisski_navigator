@@ -392,7 +392,7 @@ function wisski_navigator_overview_group($formdings, $groupid) {
           // if the orderpath is the firstmatch and the firstmatch is not the gotmatch
           if($currpath == substr($firstmatch, 1) && $firstmatch != $gotmatch) {
             // we already have this in the query
-            $sparql = str_replace("?optout", "?orderout", $sparql);
+            $sparql = str_replace("?optout", "?orderout0", $sparql);
           } else if($currpath == substr($gotmatch, 1)) {
             // in this case it is $out that we are looking for...
             
