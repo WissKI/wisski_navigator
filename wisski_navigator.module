@@ -692,7 +692,7 @@ function wisski_navigator_add_groups() {
     $item['hidden'] = isset($oldlinks[$group]['hidden']) ? $oldlinks[$group]['hidden'] : 0;
     $item['plid'] = isset($oldlinks[$group]['plid']) ? $oldlinks[$group]['plid'] : NULL;
       
-    $id = menu_link_save(&$item);
+    $id = menu_link_save($item);
     
     $saveIDs[$id] = $group;
     if($item['hidden'] == 0) { 
